@@ -7,6 +7,7 @@ import { check } from "./sources";
 import { tick } from "./poller";
 import { createStore, type WatchStore } from "./store";
 import { DebugSender } from "./debug-sender";
+import { askBrain, baseBlockHeight } from "./brain";
 import {
   ackWatch,
   cancelMiss,
@@ -20,11 +21,17 @@ import {
 
 let rules: WatchRule[] = [];
 
-export function handleMessage(text: string, chatId: string): string {
+export interface CrowsReply {
+  text: string;
+  /** Ask the brain when true (message wasn't a command or valid watch). */
+  brain?: boolean;
+}
+
+export function handleMessage(text: string, chatId: string): CrowsReply {
   const t = text.trim();
-  if (/^(hi|hello|hey|caw|crow)\b/i.test(t) && !/(watch|when)/i.test(t)) return welcome();
-  if (/^stats\b/i.test(t)) return statsOf();
-  if (/^map\b/i.test(t)) return mapOf(chatId);
+  if (/^(hi|hello|hey|caw|crow)\b/i.test(t) && !/(watch|when)/i.test(t)) return { text: welcome() };
+  if (/^stats\b/i.test(t)) return { text: statsOf() };
+  if (/^map\b/i.test(t)) return { text: mapOf(chatId) };
   const cancel = t.match(/^cancel\s+(\d+|#?\w{1,8})/i);
   if (cancel) {
     const token = cancel[1]?.toLowerCase() ?? "";
@@ -39,14 +46,28 @@ export function handleMessage(text: string, chatId: string): string {
       if (targetId === undefined && r.id.toLowerCase().startsWith(idx)) return false;
       return true;
     });
-    return before === rules.length ? cancelMiss(token) : cancelOk();
+    return { text: before === rules.length ? cancelMiss(token) : cancelOk() };
   }
-  if (/^(help|what can you do)\b/i.test(t)) return help();
+  if (/^(help|what can you do)\b/i.test(t)) return { text: help() };
 
   const parsed = parseWatch({ chat: chatId, text: t });
-  if ("error" in parsed) return `Hmm, master — ${parsed.error}`;
+  if ("error" in parsed) return { text: "", brain: true };
   rules.push(parsed);
-  return ackWatch(parsed);
+  return { text: ackWatch(parsed) };
+}
+
+export async function brainReply(text: string, chatId: string): Promise<string> {
+  const list = rules.filter((r) => r.chat === chatId).map((r) => r.label);
+  const block = await baseBlockHeight();
+  try {
+    const answer = await askBrain(text, { chatRules: list, baseBlock: block });
+    return (
+      answer ??
+      "My mind is veiled, master — no oracle is linked. Set LLM_API_KEY and I shall speak freely."
+    );
+  } catch {
+    return "Fog has taken my mind for a moment, master. Try me again.";
+  }
 }
 
 function mapOf(chatId: string): string {
@@ -86,7 +107,11 @@ async function main() {
     for await (const line of rl) {
       if (!line.trim()) continue;
       const reply = handleMessage(line, "stdin");
-      console.log(`[response] ${reply}`);
+      if (reply.brain) {
+        console.log(`[brain] ${await brainReply(line, "stdin")}`);
+      } else {
+        console.log(`[response] ${reply.text}`);
+      }
       await tick(rules, store, hooks, check, config.checkInMs);
       await store.save(rules);
     }
@@ -138,7 +163,8 @@ async function main() {
     spaces.set(space.id, space);
     if (message.content.type !== "text") continue;
     const reply = handleMessage(message.content.text, space.id);
-    await space.send(reply);
+    const out = reply.brain ? await brainReply(message.content.text, space.id) : reply.text;
+    await space.send(out);
   }
 
   clearInterval(timer);

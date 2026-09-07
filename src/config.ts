@@ -29,7 +29,12 @@ export const config = {
   dryRun: process.env.CROWS_DRY === "1",
 
   /** iMessage address (phone or Apple ID email) to ping on startup. */
-  operatorPhone: process.env.OPERATOR_PHONE ?? ""
+  operatorPhone: process.env.OPERATOR_PHONE ?? "",
+
+  /** Free LLM for freeform chat (Groq-style OpenAI chat API). Empty = brain offline. */
+  llmApiKey: process.env.LLM_API_KEY ?? "",
+  llmBaseUrl: process.env.LLM_BASE_URL ?? "https://api.groq.com/openai/v1",
+  llmModel: process.env.LLM_MODEL ?? "llama-3.3-70b-versatile"
 };
 
 export type WatchSource =

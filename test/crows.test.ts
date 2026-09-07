@@ -5,7 +5,7 @@ import { hashText } from "../src/sources";
 import { alertFor, checkInMessage } from "../src/persona";
 import { MemoryStore } from "../src/store";
 import { tick } from "../src/poller";
-import { handleMessage } from "../src/index";
+import { handleMessage, brainReply } from "../src/index";
 
 const chat = "test-chat";
 
@@ -184,21 +184,35 @@ describe("store", () => {
 describe("handleMessage", () => {
   it("acknowledges a watch and maps it", () => {
     const reply = handleMessage("watch when @vitalik posts once", chat);
-    expect(reply).toMatch(/Watching vitalik posting/);
-    expect(handleMessage("map", chat)).toMatch(/vitalik posting/);
+    expect(reply.text).toMatch(/Watching vitalik posting/);
+    expect(handleMessage("map", chat).text).toMatch(/vitalik posting/);
   });
 
   it("reports stats across chats", () => {
     handleMessage("watch when @vitalik posts once", chat);
     const reply = handleMessage("stats", chat);
-    expect(reply).toMatch(/watch\(es\) across/);
+    expect(reply.text).toMatch(/watch\(es\) across/);
   });
 
   it("answers hello in crow voice", () => {
-    expect(handleMessage("hey", chat)).toMatch(/master/);
+    expect(handleMessage("hey", chat).text).toMatch(/master/);
   });
 
-  it("softens parse errors", () => {
-    expect(handleMessage("please do a thing", chat)).toMatch(/Hmm, master/);
+  it("routes unrecognized messages to the brain", () => {
+    const reply = handleMessage("what is the gas situation today?", chat);
+    expect(reply.brain).toBe(true);
   });
+
+  it("keeps commands local, never brain", () => {
+    expect(handleMessage("map", chat).brain).toBeUndefined();
+    expect(handleMessage("cancel 1", chat).brain).toBeUndefined();
+    expect(handleMessage("watch when @vitalik posts once", chat).brain).toBeUndefined();
+  });
+});
+
+describe("brainReply", () => {
+  it("falls back gracefully when no oracle is linked", async () => {
+    const out = await brainReply("tell me a story", chat);
+    expect(out).toMatch(/veiled|fog/i);
+  }, 20_000);
 });
