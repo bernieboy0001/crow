@@ -8,6 +8,7 @@ import { tick } from "./poller";
 import { createStore, type WatchStore } from "./store";
 import { DebugSender } from "./debug-sender";
 import { askBrain, baseBlockHeight } from "./brain";
+import { ChatMemory } from "./memory";
 import {
   ackWatch,
   cancelMiss,
@@ -20,6 +21,7 @@ import {
 } from "./persona";
 
 let rules: WatchRule[] = [];
+const chatters = new Map<string, ChatMemory>();
 
 export interface CrowsReply {
   text: string;
@@ -57,17 +59,20 @@ export function handleMessage(text: string, chatId: string): CrowsReply {
 }
 
 export async function brainReply(text: string, chatId: string): Promise<string> {
+  const mem = chatters.get(chatId) ?? new ChatMemory();
+  mem.add("user", text);
   const list = rules.filter((r) => r.chat === chatId).map((r) => r.label);
   const block = await baseBlockHeight();
+  let out: string;
   try {
-    const answer = await askBrain(text, { chatRules: list, baseBlock: block });
-    return (
-      answer ??
-      "My mind is veiled, master — no oracle is linked. Set LLM_API_KEY and I shall speak freely."
-    );
+    const answer = await askBrain(text, { chatRules: list, baseBlock: block, recent: mem.lines() });
+    out = answer ?? "My mind is veiled, master — no oracle is linked. Set LLM_API_KEY and I shall speak freely.";
   } catch {
-    return "Fog has taken my mind for a moment, master. Try me again.";
+    out = "Fog has taken my mind for a moment, master. Try me again.";
   }
+  mem.add("assistant", out);
+  chatters.set(chatId, mem);
+  return out;
 }
 
 function mapOf(chatId: string): string {

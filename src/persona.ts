@@ -30,7 +30,8 @@ export function help(): string {
   "when <url> contains "in stock""
   "watch rss <url>"
   "when the base block passes 123456789"
-  "map" for my watchlist, "cancel 2" to end a watch, "stats" for my roster`;
+  "map" for my watchlist, "cancel 2" to end a watch, "stats" for my roster
+  Or just ask me anything — I hold a mind, and I can fetch a page you name.`;
 }
 
 export function cancelOk(): string {

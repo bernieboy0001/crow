@@ -6,6 +6,7 @@ import { alertFor, checkInMessage } from "../src/persona";
 import { MemoryStore } from "../src/store";
 import { tick } from "../src/poller";
 import { handleMessage, brainReply } from "../src/index";
+import { ChatMemory } from "../src/memory";
 
 const chat = "test-chat";
 
@@ -215,4 +216,23 @@ describe("brainReply", () => {
     const out = await brainReply("tell me a story", chat);
     expect(out).toMatch(/veiled|fog/i);
   }, 20_000);
+});
+
+describe("ChatMemory", () => {
+  it("recalls recent exchanges in order", () => {
+    const m = new ChatMemory(3);
+    expect(m.lines()).toEqual([]);
+    m.add("user", "one");
+    m.add("assistant", "two");
+    m.add("user", "three");
+    expect(m.lines()).toEqual(["user: one", "assistant: two", "user: three"]);
+  });
+
+  it("drops oldest past the cap", () => {
+    const m = new ChatMemory(2);
+    m.add("user", "a");
+    m.add("user", "b");
+    m.add("assistant", "c");
+    expect(m.lines()).toEqual(["user: b", "assistant: c"]);
+  });
 });
