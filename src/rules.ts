@@ -21,6 +21,8 @@ export interface WatchRule {
   lastCheckedAt: number;
   lastNotifiedAt?: number;
   lastValue?: string | number;
+  /** Last observed match state, so steady-state rules fire on the edge only. */
+  matchedState?: boolean;
 }
 
 export interface NewWatch {

@@ -38,8 +38,12 @@ export function evaluate(rule: WatchRule, res: CheckResult): EvaluateOutcome {
       break;
   }
 
-  const alreadyFired = rule.mode === "once" && rule.fired;
-  const fired = matched && !alreadyFired;
+  // Steady-state comparators (gte/lt/eq/present/absent/contains) must fire on
+  // the *rising edge* only, otherwise they'd alert every tick while true.
+  const steady = rule.condition.comparator !== "changed";
+  const edge = matched && (!steady || rule.matchedState !== true);
+  const alreadyFiredOnce = rule.mode === "once" && rule.fired;
+  const fired = edge && !alreadyFiredOnce;
 
   return { fired, changed, matched };
 }

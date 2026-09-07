@@ -1,7 +1,7 @@
 import type { WatchRule } from "./rules";
 import type { CheckResult } from "./sources";
 import { evaluate } from "./evaluator";
-import { alertFor, checkInMessage } from "./persona";
+import { alertFor, alreadyTrue, checkInMessage } from "./persona";
 import type { WatchStore } from "./store";
 
 export interface PollHooks {
@@ -22,11 +22,14 @@ export async function tick(
 ): Promise<WatchRule[]> {
   const now = Date.now();
   for (const rule of rules) {
+    const neverChecked = rule.lastCheckedAt === 0;
     const res = await worker(rule);
     rule.lastCheckedAt = now;
     if (res.value !== null && res.value !== undefined) rule.lastValue = res.value;
 
     const outcome = evaluate(rule, res);
+    rule.matchedState = outcome.matched;
+
     if (!outcome.fired) {
       const due = now - (rule.lastNotifiedAt ?? rule.createdAt);
       if (due >= checkInMs) {
@@ -38,7 +41,12 @@ export async function tick(
 
     rule.fired = true;
     rule.lastNotifiedAt = now;
-    await hooks.send(rule.chat, alertFor(rule, res));
+    if (neverChecked && outcome.matched && rule.condition.comparator !== "changed") {
+      // Hit on the very first observation: warn, don't fake an event.
+      await hooks.send(rule.chat, alreadyTrue(rule));
+    } else {
+      await hooks.send(rule.chat, alertFor(rule, res));
+    }
   }
   await store.save(rules);
   return rules;

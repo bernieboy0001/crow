@@ -23,6 +23,7 @@ let rules: WatchRule[] = [];
 export function handleMessage(text: string, chatId: string): string {
   const t = text.trim();
   if (/^(hi|hello|hey|caw|crow)\b/i.test(t) && !/(watch|when)/i.test(t)) return HELP;
+  if (/^stats\b/i.test(t)) return statsOf();
   if (/^map\b/i.test(t)) return mapOf(chatId);
   const cancel = t.match(/^cancel\s+(\d+|#?\w{1,8})/i);
   if (cancel) {
@@ -56,6 +57,17 @@ function mapOf(chatId: string): string {
     return `${i + 1}. ${r.label}${state}`;
   });
   return lines.join("\n");
+}
+
+function statsOf(): string {
+  if (rules.length === 0) return "No watches anywhere yet.";
+  const bySource = new Map<string, number>();
+  for (const r of rules) bySource.set(r.source, (bySource.get(r.source) ?? 0) + 1);
+  const chats = new Set(rules.map((r) => r.chat)).size;
+  const lines = [...bySource.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([s, n]) => `  ${s}: ${n}`);
+  return [`stats — ${rules.length} watch(es) across ${chats} chat(s)`, ...lines].join("\n");
 }
 
 async function main() {

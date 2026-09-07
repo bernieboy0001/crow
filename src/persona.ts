@@ -37,3 +37,8 @@ export function checkInMessage(rule: WatchRule, res: CheckResult): string {
   const emoji = res.present ? "" : " (quiet)";
   return `Still watching${emoji}: ${rule.label}.`;
 }
+
+export function alreadyTrue(rule: WatchRule): string {
+  const closing = rule.mode === "once" ? " Closing the watch." : "";
+  return pick(`${rule.label} is already true — I'll hold a baseline${closing}`);
+}
