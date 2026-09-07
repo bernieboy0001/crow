@@ -67,7 +67,8 @@ export async function brainReply(text: string, chatId: string): Promise<string> 
   try {
     const answer = await askBrain(text, { chatRules: list, baseBlock: block, recent: mem.lines() });
     out = answer ?? "My mind is veiled, master — no oracle is linked. Set LLM_API_KEY and I shall speak freely.";
-  } catch {
+  } catch (e) {
+    console.error("[brain] failed:", e instanceof Error ? e.message : e);
     out = "Fog has taken my mind for a moment, master. Try me again.";
   }
   mem.add("assistant", out);
