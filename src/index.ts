@@ -103,6 +103,20 @@ async function main() {
   const store: WatchStore = createStore();
   rules = await store.load();
 
+  // Free/Pro plans route iMessage through a shared pool — there is no number
+  // to text. Conversations start with the crows sending the first message.
+  if (config.operatorPhone) {
+    try {
+      const im = imessage(app);
+      const operator = await im.user(config.operatorPhone);
+      const dm = await im.space.create(operator);
+      await dm.send("The crows are online. Reply \"help\" to set your first watch. — The Crows");
+      spaces.set(dm.id, dm);
+    } catch (e) {
+      console.error("startup ping failed:", e);
+    }
+  }
+
   const hooks = {
     send: async (chatId: string, text: string) => {
       const space = spaces.get(chatId);

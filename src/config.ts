@@ -26,7 +26,10 @@ export const config = {
   checkInMs: num(process.env.CROWS_CHECKIN_MS, 4 * 60 * 60 * 1000),
 
   /** CROWS_DRY=1 runs the stdin harness instead of connecting to Spectrum. */
-  dryRun: process.env.CROWS_DRY === "1"
+  dryRun: process.env.CROWS_DRY === "1",
+
+  /** iMessage address (phone or Apple ID email) to ping on startup. */
+  operatorPhone: process.env.OPERATOR_PHONE ?? ""
 };
 
 export type WatchSource =
