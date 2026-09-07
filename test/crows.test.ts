@@ -131,7 +131,7 @@ describe("poller", () => {
     const r = baseRule({ createdAt: Date.now() - 100_000, lastNotifiedAt: undefined });
     const sent: string[] = [];
     await tick([r], new MemoryStore(), { send: async (_c, t) => sent.push(t) }, async () => ({ value: "same", present: true }), 10_000);
-    expect(sent.some((t) => t.startsWith("Still watching"))).toBe(true);
+    expect(sent.some((t) => t.includes("Still watching"))).toBe(true);
   });
 
   it("warns 'already true' on a first-check hit instead of a fake event", async () => {
@@ -184,7 +184,7 @@ describe("store", () => {
 describe("handleMessage", () => {
   it("acknowledges a watch and maps it", () => {
     const reply = handleMessage("watch when @vitalik posts once", chat);
-    expect(reply).toMatch(/Watching: vitalik posting/);
+    expect(reply).toMatch(/Watching vitalik posting/);
     expect(handleMessage("map", chat)).toMatch(/vitalik posting/);
   });
 
@@ -192,5 +192,13 @@ describe("handleMessage", () => {
     handleMessage("watch when @vitalik posts once", chat);
     const reply = handleMessage("stats", chat);
     expect(reply).toMatch(/watch\(es\) across/);
+  });
+
+  it("answers hello in crow voice", () => {
+    expect(handleMessage("hey", chat)).toMatch(/master/);
+  });
+
+  it("softens parse errors", () => {
+    expect(handleMessage("please do a thing", chat)).toMatch(/Hmm, master/);
   });
 });

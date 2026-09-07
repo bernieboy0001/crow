@@ -7,20 +7,22 @@ import { check } from "./sources";
 import { tick } from "./poller";
 import { createStore, type WatchStore } from "./store";
 import { DebugSender } from "./debug-sender";
-
-const HELP = `The Crows — event watcher. Say:
-  "watch when @user posts"
-  "text me when <url> goes down" (or "comes back")
-  "when <url> contains a phrase in quotes"
-  "watch rss <url>"
-  "when the base block passes 123456789"
-  "map" to list watches, "cancel 2" to stop one, "stats" for the roster`;
+import {
+  ackWatch,
+  cancelMiss,
+  cancelOk,
+  help,
+  mapEmpty,
+  statsEmpty,
+  statsIntro,
+  welcome
+} from "./persona";
 
 let rules: WatchRule[] = [];
 
 export function handleMessage(text: string, chatId: string): string {
   const t = text.trim();
-  if (/^(hi|hello|hey|caw|crow)\b/i.test(t) && !/(watch|when)/i.test(t)) return HELP;
+  if (/^(hi|hello|hey|caw|crow)\b/i.test(t) && !/(watch|when)/i.test(t)) return welcome();
   if (/^stats\b/i.test(t)) return statsOf();
   if (/^map\b/i.test(t)) return mapOf(chatId);
   const cancel = t.match(/^cancel\s+(\d+|#?\w{1,8})/i);
@@ -34,38 +36,38 @@ export function handleMessage(text: string, chatId: string): string {
     rules = rules.filter((r) => {
       if (r.chat !== chatId) return true;
       if (targetId && r.id === targetId) return false;
-      if (!targetId && r.id.toLowerCase().startsWith(idx)) return false;
+      if (targetId === undefined && r.id.toLowerCase().startsWith(idx)) return false;
       return true;
     });
-    return before === rules.length ? `No watch matches "${token}".` : "Stopped that one.";
+    return before === rules.length ? cancelMiss(token) : cancelOk();
   }
-  if (/^(help|what can you do)\b/i.test(t)) return HELP;
+  if (/^(help|what can you do)\b/i.test(t)) return help();
 
   const parsed = parseWatch({ chat: chatId, text: t });
-  if ("error" in parsed) return parsed.error;
+  if ("error" in parsed) return `Hmm, master — ${parsed.error}`;
   rules.push(parsed);
-  return `Watching: ${parsed.label}. I'll be in touch. — Crows`;
+  return ackWatch(parsed);
 }
 
 function mapOf(chatId: string): string {
   const mine = rules.filter((r) => r.chat === chatId);
-  if (mine.length === 0) return "Nothing in my sights. Give me a watch.";
+  if (mine.length === 0) return mapEmpty();
   const lines = mine.map((r, i) => {
     const state = r.mode === "once" && r.fired ? " (done)" : "";
     return `${i + 1}. ${r.label}${state}`;
   });
-  return lines.join("\n");
+  return ["Your watchlist, master:", ...lines].join("\n");
 }
 
 function statsOf(): string {
-  if (rules.length === 0) return "No watches anywhere yet.";
+  if (rules.length === 0) return statsEmpty();
   const bySource = new Map<string, number>();
   for (const r of rules) bySource.set(r.source, (bySource.get(r.source) ?? 0) + 1);
   const chats = new Set(rules.map((r) => r.chat)).size;
   const lines = [...bySource.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([s, n]) => `  ${s}: ${n}`);
-  return [`stats — ${rules.length} watch(es) across ${chats} chat(s)`, ...lines].join("\n");
+  return [statsIntro(rules.length, chats), ...lines].join("\n");
 }
 
 async function main() {
@@ -108,7 +110,7 @@ async function main() {
       const im = imessage(app);
       const operator = await im.user(config.operatorPhone);
       const dm = await im.space.create(operator);
-      await dm.send("The crows are online. Reply \"help\" to set your first watch. — The Crows");
+      await dm.send('At your service, master. The Crows are online — say "help" for my tricks.');
       spaces.set(dm.id, dm);
     } catch (e) {
       console.error("startup ping failed:", e);

@@ -1,44 +1,83 @@
 import type { CheckResult } from "./sources";
 import type { WatchRule } from "./rules";
 
-const OPENERS = [
-  "I am watching",
-  "A crow has landed",
-  "I see it",
-  "One of my eyes just opened",
-  "It changed while you slept"
-];
+const FLIGHTS = [
+  "I see it, master",
+  "A crow alights with news",
+  "Swift wings bear word",
+  "My beady eye has caught it",
+  "The roost stirs"
+] as const;
 
-function pick(who: string): string {
-  const i = (Date.now() % OPENERS.length);
-  return `${OPENERS[i]} — ${who}.`;
+function flight(): string {
+  const i = (FLIGHTS.length + Date.now()) % FLIGHTS.length;
+  return FLIGHTS[i] ?? FLIGHTS[0];
 }
 
-export function alertFor(rule: WatchRule, res: CheckResult): string {
+/** A full ack or $trigger fired. */
+export function ackWatch(rule: WatchRule): string {
+  return `Your wish is my flight-path, master. Watching ${rule.label}.`;
+}
+
+export function welcome(): string {
+  return 'At your service, master. Say "help" and I shall teach you my tricks.';
+}
+
+export function help(): string {
+  return `I am the Crows, master — your eye in the sky. Command me:
+  "watch when @user posts"
+  "text me when <url> goes down" (or "comes back")
+  "when <url> contains "in stock""
+  "watch rss <url>"
+  "when the base block passes 123456789"
+  "map" for my watchlist, "cancel 2" to end a watch, "stats" for my roster`;
+}
+
+export function cancelOk(): string {
+  return "The watch is ended, master. I fold my wings.";
+}
+
+export function cancelMiss(token: string): string {
+  return `No watch bears that mark, master ("${token}").`;
+}
+
+export function mapEmpty(): string {
+  return "Nothing in my sights yet, master. Give me a watch.";
+}
+
+export function statsEmpty(): string {
+  return "My days are idle, master — no watches yet.";
+}
+
+export function statsIntro(n: number, m: number): string {
+  return `My roster, master — ${n} watch(es) across ${m} chat(s):`;
+}
+
+export function alertFor(rule: WatchRule, _res: CheckResult): string {
   const what = rule.label;
   switch (rule.condition.comparator) {
     case "absent":
-      return pick(`${what} — it's DOWN, so I'm watching the dark`);
+      return `${flight()} — ${what} has fallen dark, master. I watch the shadows for its return.`;
     case "present":
-      return pick(`${what} — it's back`);
+      return `${flight()} — ${what} breathes again, master.`;
     case "gte":
-      return pick(`${what} has been reached`);
+      return `${flight()} — ${what} has been reached, master.`;
     case "lt":
-      return pick(`${what} has fallen below threshold`);
+      return `${flight()} — ${what} has dipped low, master.`;
     case "contains":
-      return pick(`${what} — it's there, like you asked`);
+      return `${flight()} — ${what}, master. Just as you asked.`;
     case "changed":
     default:
-      return pick(`${what} — something moved`);
+      return `${flight()} — ${what} has moved, master.`;
   }
 }
 
 export function checkInMessage(rule: WatchRule, res: CheckResult): string {
-  const emoji = res.present ? "" : " (quiet)";
-  return `Still watching${emoji}: ${rule.label}.`;
+  const state = res.present ? "all quiet" : "the place lies dark";
+  return `Perched, master. Still watching ${rule.label} — ${state}.`;
 }
 
 export function alreadyTrue(rule: WatchRule): string {
-  const closing = rule.mode === "once" ? " Closing the watch." : "";
-  return pick(`${rule.label} is already true — I'll hold a baseline${closing}`);
+  const closing = rule.mode === "once" ? " I fold my wings and withdraw." : "";
+  return `${rule.label} is already true, master. I hold a baseline regardless${closing}`;
 }
