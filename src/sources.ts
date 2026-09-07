@@ -1,5 +1,6 @@
 import { config } from "./config";
 import type { WatchRule } from "./rules";
+import { findTeam, type SocMatch } from "./soccer";
 
 const TIMEOUT_MS = 10_000;
 
@@ -93,6 +94,18 @@ export async function check(rule: WatchRule): Promise<CheckResult> {
         });
         const j = (await body.json()) as { result?: string };
         return { value: parseInt(j.result ?? "0x0", 16), present: true };
+      }
+    case "soccer": {
+        const found = await findTeam(rule.target);
+        if (!found) return { value: null, present: false, error: "no fixture right now" };
+        const opp = found.match.teams.find((t) => t.id !== found.team.id);
+        const state: number = found.match.state === "pre" ? 0 : found.match.state === "in" ? 1 : 2;
+        const score = `${found.team.score}-${opp?.score ?? "?"}`;
+        return {
+          value: rule.condition.comparator === "changed" ? score : state,
+          present: true,
+          meta: { state, score, home: found.team.name, away: opp?.name ?? "", matchOpp: opp?.name ?? "" }
+        };
       }
     }
   } catch (e) {

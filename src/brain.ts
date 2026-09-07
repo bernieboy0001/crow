@@ -5,6 +5,8 @@ export interface BrainContext {
   baseBlock?: number;
   /** Recent exchanges from this chat, newest last. */
   recent?: string[];
+  /** Current state of the fixtures this chat watches. */
+  soccer?: string[];
 }
 
 interface ToolCall {
@@ -62,6 +64,9 @@ function systemPrompt(ctx: BrainContext, block?: number): string {
   const parts: string[] = [SYSTEM];
   if (ctx.chatRules.length > 0) parts.push(`The master's active watches: ${ctx.chatRules.join("; ")}.`);
   if (block) parts.push(`Current Base mainnet block ≈ ${block}.`);
+  if (ctx.soccer && ctx.soccer.length > 0) {
+    parts.push(`Live soccer fixtures the master follows:\n${ctx.soccer.join("\n")}`);
+  }
   if (ctx.recent && ctx.recent.length > 0) {
     parts.push(`Recent conversation with this master:\n${ctx.recent.join("\n")}`);
   }

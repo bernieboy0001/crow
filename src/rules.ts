@@ -138,6 +138,36 @@ export function parseWatch(min: NewWatch): WatchRule | { error: string } {
     return { error: 'tell me WHEN — posts, goes down, comes back, changes, contains "..."' };
   }
 
+  // ---- soccer ----
+  const socScore = t.match(/(?:when|if)\s+(.+?)\s+(?:scor(?:es?|ed)|puts one in|nets?)/i);
+  const socKickoff = t.match(/(?:when|if)\s+(.+?)\s+(?:kicks?\s?off|kick\s?off|plays?|starts?)\b/i);
+  const socFulltime = t.match(
+    /(?:when|if)\s+(.+?)\s+(?:finishes?|ends?|go(?:es)?\s+full.?time|gets?\s+the\s+result|result\s+of|final\s+whistle)/i
+  );
+  const socWatch = t.match(/(?:watch|track|follow)\s+(?:soccer|football)\s+(.+)|(?:soccer|football)\s+watch\s+(.+)/i);
+  const soccerTeam =
+    socScore?.[1]?.trim() ??
+    socKickoff?.[1]?.trim() ??
+    socFulltime?.[1]?.trim() ??
+    socWatch?.[1]?.trim() ??
+    socWatch?.[2]?.trim();
+  if (soccerTeam && /(?:soccer|football|match|fixture|kick|score|full.?time|play)/i.test(t)) {
+    const comparator = socScore ? "changed" : socKickoff ? "gte" : "eq";
+    const value = socScore ? undefined : socKickoff ? 1 : 2;
+    return {
+      id: randomUUID(),
+      chat,
+      source: "soccer",
+      target: soccerTeam,
+      label: `${soccerTeam} ${socScore ? "scoring" : socKickoff ? "kicking off" : "going full time"}`,
+      condition: { comparator, value },
+      mode: onceMaybe(t),
+      fired: false,
+      createdAt: Date.now(),
+      lastCheckedAt: 0
+    };
+  }
+
   // ---- base block ----
   const blockHit = t.match(/\b(base|ethereum|eth)?\s*block\s*(?:passes|reaches|exceeds|crosses)?\s*(\d{5,})/i);
   if (blockHit && blockHit[2] !== undefined) {

@@ -42,4 +42,5 @@ export type WatchSource =
   | "rss"
   | "url"
   | "status"
-  | "base-block";
+  | "base-block"
+  | "soccer";

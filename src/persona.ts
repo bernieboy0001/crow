@@ -30,6 +30,8 @@ export function help(): string {
   "when <url> contains "in stock""
   "watch rss <url>"
   "when the base block passes 123456789"
+  "watch soccer arsenal" (or "when arsenal kick off" / "score" / "goes full time")
+  "predict <team> vs <team>" for my call on the result
   "map" for my watchlist, "cancel 2" to end a watch, "stats" for my roster
   Or just ask me anything — I hold a mind, and I can fetch a page you name.`;
 }
@@ -54,7 +56,21 @@ export function statsIntro(n: number, m: number): string {
   return `My roster, master — ${n} watch(es) across ${m} chat(s):`;
 }
 
-export function alertFor(rule: WatchRule, _res: CheckResult): string {
+export function alertFor(rule: WatchRule, res: CheckResult): string {
+  if (rule.source === "soccer") {
+    const meta = res.meta ?? {};
+    const score = typeof meta.score === "string" ? meta.score : "";
+    const home = typeof meta.home === "string" ? meta.home : rule.target;
+    const away = typeof meta.matchOpp === "string" ? meta.matchOpp : "";
+    switch (rule.condition.comparator) {
+      case "gte":
+        return `${flight()} — ${rule.label}, master. ${home} ${score} ${away}. The fever begins.`;
+      case "changed":
+        return `${flight()} — goal news, master. ${home} ${score} ${away}.`;
+      default:
+        return `${flight()} — ${rule.label}, master. Full whistle: ${home} ${score} ${away}.`;
+    }
+  }
   const what = rule.label;
   switch (rule.condition.comparator) {
     case "absent":
