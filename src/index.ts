@@ -66,14 +66,30 @@ export async function brainReply(text: string, chatId: string): Promise<string> 
   let out: string;
   try {
     const answer = await askBrain(text, { chatRules: list, baseBlock: block, recent: mem.lines() });
-    out = answer ?? "My mind is veiled, master — no oracle is linked. Set LLM_API_KEY and I shall speak freely.";
+    out =
+      answer ??
+      "My mind is veiled, master — no oracle is linked. Set LLM_API_KEY and I shall speak freely. " +
+        brainDiag();
   } catch (e) {
     console.error("[brain] failed:", e instanceof Error ? e.message : e);
-    out = "Fog has taken my mind for a moment, master. Try me again.";
+    out = `Fog has taken my mind for a moment, master. Try me again. ${brainDiag(
+      e instanceof Error ? e.message : String(e)
+    )}`;
   }
   mem.add("assistant", out);
   chatters.set(chatId, mem);
   return out;
+}
+
+function brainDiag(err?: string): string {
+  const key = config.llmApiKey;
+  const bits = [
+    err ? `err=${err}` : "",
+    `key=${key.length > 0 ? "set" : "empty"}`,
+    `url=${config.llmBaseUrl}`,
+    `model=${config.llmModel}`
+  ];
+  return `[diag ${bits.filter(Boolean).join(" ")}]`;
 }
 
 function mapOf(chatId: string): string {
