@@ -77,9 +77,32 @@ function safeJson(raw: unknown): unknown {
   }
 }
 
+/** Resolved once the configured model is proven gone; then reused. */
+let workingModel: string | null = null;
+
+const MODEL_PREFERENCE = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"];
+
+async function resolveModel(): Promise<string | undefined> {
+  try {
+    const res = await fetch(`${config.llmBaseUrl}/models`, {
+      headers: { authorization: `Bearer ${config.llmApiKey}` },
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!res.ok) return undefined;
+    const j = (await res.json()) as { data?: { id?: string }[] };
+    const ids = (j.data ?? [])
+      .map((d) => d.id)
+      .filter((id): id is string => typeof id === "string" && !/whisper|guard/i.test(id));
+    return MODEL_PREFERENCE.find((c) => ids.includes(c)) ?? ids[0];
+  } catch {
+    return undefined;
+  }
+}
+
 async function callChat(messages: unknown[], toolsOn: boolean): Promise<ChatReply> {
+  const model = workingModel ?? config.llmModel;
   const body: Record<string, unknown> = {
-    model: config.llmModel,
+    model,
     messages,
     max_tokens: 300,
     temperature: 0.8
@@ -95,6 +118,15 @@ async function callChat(messages: unknown[], toolsOn: boolean): Promise<ChatRepl
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(30_000)
   });
+  // Model retired/changed on the provider? Self-heal with its live list, once.
+  if (res.status === 404 && !workingModel) {
+    const replacement = await resolveModel();
+    if (replacement) {
+      workingModel = replacement;
+      console.warn(`[brain] model ${config.llmModel} missing; using ${replacement}`);
+      return callChat(messages, toolsOn);
+    }
+  }
   if (!res.ok) throw new Error(`brain ${res.status}`);
   const j = (await res.json()) as {
     choices?: { message?: { content?: string | null; tool_calls?: Record<string, unknown>[] } }[];
