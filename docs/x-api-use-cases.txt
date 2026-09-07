@@ -1,0 +1,33 @@
+# X API use case — "The Crows" event watchdog
+
+*(Plain text, sized to paste into the X Developer Agreement form's
+"Describe all of your use cases of X's data and API" field.)*
+
+---
+
+The Crows is a personal event-watchdog messaging agent. A single operator
+issues one-off "watch" rules over iMessage, e.g. "watch when @vitalik posts".
+
+It uses X API v2 in one way only: to be notified that a specific public account
+the operator named has posted a new tweet.
+
+Endpoints used:
+- `GET /2/users/by/username/:username` — resolve a handful of handles.
+- `GET /2/users/:id/tweets` — fetch the most recent tweet ID per watched
+  handle to detect a new post (change detection).
+
+What we do with the data:
+- A new tweet ID compared against the previously observed ID triggers a
+  "new post" text notification to the operator.
+- We read public tweet metadata only. We do not aggregate, store the tweet
+  body, repost, redistribute, resell, train models on, or otherwise use X
+  content. No end-user personal data is collected from X. Nothing is shared
+  with third parties.
+
+Retention & security:
+- The only retained value is the most recent tweet ID per watched handle,
+  kept locally so the operator isn't alerted twice; it is removed when the
+  watch is cancelled.
+- Volume is tiny (1-5 watched handles, polled a few times a minute, well
+  within free-tier rate limits).
+- The bearer token lives only in the deployment's environment variables.

@@ -1,0 +1,24 @@
+services:
+  - type: worker
+    name: crows
+    # Always-on long-running process: must keep its Spectrum websocket open.
+    # Free-tier workers spin down on inactivity, so this needs a paid plan.
+    plan: starter
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    disk:
+      name: crows-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: CROWS_STORE
+        value: /data/crows.json
+      - key: BASE_RPC_URL
+        value: https://mainnet.base.org
+      - key: PROJECT_ID
+        sync: false
+      - key: PROJECT_SECRET
+        sync: false
+      - key: X_BEARER_TOKEN
+        sync: false
