@@ -99,6 +99,71 @@ async function resolveModel(): Promise<string | undefined> {
   }
 }
 
+let lastResolvedAt = 0;
+
+/** Pick a working model from the provider's live list. Call once at boot. */
+export async function warmupBrain(): Promise<void> {
+  if (!brainConfigured()) {
+    console.warn("[brain] offline — set LLM_API_KEY in the environment to wake it.");
+    return;
+  }
+  try {
+    const res = await fetch(`${config.llmBaseUrl}/models`, {
+      headers: { authorization: `Bearer ${config.llmApiKey}` },
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (res.status === 401) {
+      console.error("[brain] key rejected (401) — check LLM_API_KEY on this deployment.");
+      return;
+    }
+    if (!res.ok) {
+      console.error(`[brain] provider list failed (${res.status}) — check LLM_BASE_URL.`);
+      return;
+    }
+    const j = (await res.json()) as { data?: { id?: string }[] };
+    const ids = (j.data ?? [])
+      .map((d) => d.id)
+      .filter((id): id is string => typeof id === "string" && !/whisper|guard/i.test(id));
+    const chosen = ids.includes(config.llmModel)
+      ? config.llmModel
+      : MODEL_PREFERENCE.find((c) => ids.includes(c)) ?? ids[0];
+    if (chosen) {
+      workingModel = chosen;
+      lastResolvedAt = Date.now();
+      console.log(
+        chosen === config.llmModel
+          ? `[brain] model ${config.llmModel} verified.`
+          : `[brain] model ${config.llmModel} missing — using ${chosen}.`
+      );
+    } else {
+      console.error("[brain] provider offered no usable chat models.");
+    }
+  } catch (e) {
+    console.warn(`[brain] warmup failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+async function postChat(body: Record<string, unknown>): Promise<Response> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await fetch(`${config.llmBaseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.llmApiKey}`,
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000)
+      });
+    } catch (e) {
+      last = e;
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+  throw last instanceof Error ? last : new Error(String(last));
+}
+
 async function callChat(messages: unknown[], toolsOn: boolean): Promise<ChatReply> {
   const model = workingModel ?? config.llmModel;
   const body: Record<string, unknown> = {
@@ -109,15 +174,7 @@ async function callChat(messages: unknown[], toolsOn: boolean): Promise<ChatRepl
   };
   if (toolsOn) body.tools = [FETCH_TOOL];
 
-  const res = await fetch(`${config.llmBaseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${config.llmApiKey}`,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000)
-  });
+  const res = await postChat(body);
   // Model retired/changed on the provider? Self-heal with its live list, once.
   if (res.status === 404 && !workingModel) {
     const replacement = await resolveModel();

@@ -7,7 +7,7 @@ import { check } from "./sources";
 import { tick } from "./poller";
 import { createStore, type WatchStore } from "./store";
 import { DebugSender } from "./debug-sender";
-import { askBrain, baseBlockHeight } from "./brain";
+import { askBrain, baseBlockHeight, warmupBrain } from "./brain";
 import { ChatMemory } from "./memory";
 import {
   ackWatch,
@@ -133,6 +133,8 @@ async function main() {
   const spaces = new Map<string, Space>();
   const store: WatchStore = createStore();
   rules = await store.load();
+
+  void warmupBrain();
 
   // Free/Pro plans route iMessage through a shared pool — there is no number
   // to text. Conversations start with the crows sending the first message.
