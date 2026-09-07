@@ -8,15 +8,13 @@ import { tick } from "./poller";
 import { createStore, type WatchStore } from "./store";
 import { DebugSender } from "./debug-sender";
 
-const HELP = [
-  'The Crows — event watcher. Say:',
-  '  "watch when @user posts"',
-  '  "text me when <url> goes down" / "... comes back"',
-  '  "when <url> contains \\"in stock\\""',
-  '  "watch rss <url>"',
-  '  "when the base block passes 12345678"',
-  '  "map" to list watches, "cancel <n>" to stop one'
-].join("\n");
+const HELP = `The Crows — event watcher. Say:
+  "watch when @user posts"
+  "text me when <url> goes down" (or "comes back")
+  "when <url> contains a phrase in quotes"
+  "watch rss <url>"
+  "when the base block passes 123456789"
+  "map" to list watches, "cancel 2" to stop one, "stats" for the roster`;
 
 let rules: WatchRule[] = [];
 
