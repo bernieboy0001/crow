@@ -195,7 +195,7 @@ async function callChat(messages: unknown[], toolsOn: boolean): Promise<ChatRepl
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`brain ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+    throw new Error(`brain ${res.status}${detail ? `: ${detail.slice(0, 600)}` : ""}`);
   }
   const j = (await res.json()) as {
     choices?: { message?: { content?: string | null; tool_calls?: Record<string, unknown>[] } }[];
@@ -258,7 +258,9 @@ export async function askBrain(question: string, ctx: BrainContext): Promise<str
       }))
     });
     messages.push({ role: "tool", tool_call_id: tool.id, content: result });
-    reply = await callChat(messages, false);
+    // Keep tools declared on the follow-up: a request that carries tool_calls /
+    // tool messages but declares no tools gets rejected by the provider.
+    reply = await callChat(messages, true);
   }
 
   return reply.content?.trim() || null;

@@ -6,12 +6,16 @@ export interface GroqStub {
   stop(): Promise<void>;
   listHits(): number;
   chatHits(): number;
+  /** Whether each chat request carried a tools array, in request order. */
+  chatTracks(): { hasTools: boolean }[];
   readonly deadModel: string;
 }
 
 export interface GroqStubOpts {
   /** Reply 400 to any request that carries a tools array (function calling). */
   rejectTools?: boolean;
+  /** First chat request returns a fetch_url tool call; later ones answer. */
+  toolThenAnswer?: boolean;
 }
 
 export async function startGroqStub(
@@ -20,6 +24,7 @@ export async function startGroqStub(
 ): Promise<GroqStub> {
   let listHits = 0;
   let chatHits = 0;
+  const tracks: { hasTools: boolean }[] = [];
   const server: Server = createServer((req, res) => {
     const send = (status: number, body: string) => {
       res.statusCode = status;
@@ -57,10 +62,35 @@ export async function startGroqStub(
         } catch {
           model = "";
         }
+        tracks.push({ hasTools });
         if (model === deadModel) {
           send(404, `{"error":{"message":"Model not found"}}`);
         } else if (opts.rejectTools && hasTools) {
           send(400, `{"error":{"message":"model does not support tools"}}`);
+        } else if (opts.toolThenAnswer && chatHits === 1) {
+          send(
+            200,
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: "call_1",
+                        type: "function",
+                        function: {
+                          name: "fetch_url",
+                          arguments: JSON.stringify({ url: "https://example.com" })
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            })
+          );
         } else {
           send(
             200,
@@ -82,6 +112,7 @@ export async function startGroqStub(
       ),
     listHits: () => listHits,
     chatHits: () => chatHits,
+    chatTracks: () => tracks,
     deadModel
   };
 }
