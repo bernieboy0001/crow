@@ -9,7 +9,15 @@ export interface GroqStub {
   readonly deadModel: string;
 }
 
-export async function startGroqStub(deadModel: string): Promise<GroqStub> {
+export interface GroqStubOpts {
+  /** Reply 400 to any request that carries a tools array (function calling). */
+  rejectTools?: boolean;
+}
+
+export async function startGroqStub(
+  deadModel: string,
+  opts: GroqStubOpts = {}
+): Promise<GroqStub> {
   let listHits = 0;
   let chatHits = 0;
   const server: Server = createServer((req, res) => {
@@ -35,16 +43,24 @@ export async function startGroqStub(deadModel: string): Promise<GroqStub> {
     if (req.method === "POST" && req.url === "/chat/completions") {
       chatHits += 1;
       let model = "";
+      let hasTools = false;
       const chunks: Buffer[] = [];
       req.on("data", (c) => chunks.push(c));
       req.on("end", () => {
         try {
-          model = (JSON.parse(Buffer.concat(chunks).toString()) as { model?: string }).model ?? "";
+          const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+            model?: string;
+            tools?: unknown;
+          };
+          model = body.model ?? "";
+          hasTools = Array.isArray(body.tools) && body.tools.length > 0;
         } catch {
           model = "";
         }
         if (model === deadModel) {
           send(404, `{"error":{"message":"Model not found"}}`);
+        } else if (opts.rejectTools && hasTools) {
+          send(400, `{"error":{"message":"model does not support tools"}}`);
         } else {
           send(
             200,

@@ -7,16 +7,19 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
+    "cards:preview": "tsx scripts/cards-preview.ts",
     "test": "vitest run"
   },
   "dependencies": {
-    "spectrum-ts": "^12.8.0",
-    "dotenv": "^16.4.5"
+    "@napi-rs/canvas": "^1.0.8",
+    "dotenv": "^16.4.5",
+    "spectrum-ts": "^12.8.0"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@photon-ai/cli": "^2.2.0",
     "@types/node": "^22",
     "tsx": "^4",
+    "typescript": "^5",
     "vitest": "^2.1.8"
   }
 }

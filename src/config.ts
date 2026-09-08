@@ -31,10 +31,13 @@ export const config = {
   /** iMessage address (phone or Apple ID email) to ping on startup. */
   operatorPhone: process.env.OPERATOR_PHONE ?? "",
 
+  /** CROWS_CARDS=1 sends PNG scoreboard attachments instead of plain alerts. */
+  cards: process.env.CROWS_CARDS === "1",
+
   /** Free LLM for freeform chat (Groq-style OpenAI chat API). Empty = brain offline. */
   llmApiKey: process.env.LLM_API_KEY ?? "",
   llmBaseUrl: process.env.LLM_BASE_URL ?? "https://api.groq.com/openai/v1",
-  llmModel: process.env.LLM_MODEL ?? "llama-3.3-70b-versatile"
+  llmModel: process.env.LLM_MODEL ?? "openai/gpt-oss-120b"
 };
 
 export type WatchSource =

@@ -122,13 +122,13 @@ describe("predict routing", () => {
 
   it("predictReply reads form even without an oracle", async () => {
     const out = await predictReply("arsenal", "chelsea", "t");
-    expect(out).toContain("oracle is veiled");
-    expect(out).toContain("Arsenal");
+    expect(out.text).toContain("oracle is veiled");
+    expect(out.text).toContain("Arsenal");
   }, 20_000);
 
   it("predictReply admits when a fixture is unknown", async () => {
     const out = await predictReply("nonexistent fc", "also unknown fc", "t");
-    expect(out).toContain("No fixture");
+    expect(out.text).toContain("No fixture");
   }, 20_000);
 });
 

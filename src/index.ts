@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { Spectrum, type Space } from "spectrum-ts";
+import { Spectrum, attachment, type Space } from "spectrum-ts";
 import { imessage } from "@spectrum-ts/imessage";
 import { config } from "./config";
 import { parseWatch, type WatchRule } from "./rules";
@@ -8,7 +8,8 @@ import { tick } from "./poller";
 import { createStore, type WatchStore } from "./store";
 import { DebugSender } from "./debug-sender";
 import { askBrain, baseBlockHeight, warmupBrain } from "./brain";
-import { findTeam, soccerContext, teamBrief } from "./soccer";
+import { findTeam, formOf, soccerContext, teamBrief, type FormRow, type FoundTeam } from "./soccer";
+import { predictCard, type CardImage } from "./cards";
 import { ChatMemory } from "./memory";
 import {
   ackWatch,
@@ -109,7 +110,11 @@ function brainDiag(err?: string): string {
 }
 
 /** The crow's call on an upcoming fixture, grounded in real form + standings. */
-export async function predictReply(teamA: string, teamB: string, chatId: string): Promise<string> {
+export async function predictReply(
+  teamA: string,
+  teamB: string,
+  chatId: string
+): Promise<{ text: string; card?: CardImage }> {
   const [a, b] = [await findTeam(teamA), await findTeam(teamB)];
   if (a && b && a.match.id === b.match.id) {
     const briefA = await teamBrief(a);
@@ -123,21 +128,58 @@ export async function predictReply(teamA: string, teamB: string, chatId: string)
       const answer = await askBrain(prompt, {
         chatRules: rules.filter((r) => r.chat === chatId).map((r) => r.label)
       });
-      if (answer) return answer;
+      if (answer) return { text: answer, card: await callCard(a, b, answer) };
     } catch {
       /* fall through to the numbers-only verdict */
     }
-    return `My eye is on ${a.match.teams.map((t) => t.name).join(" vs ")} — but my oracle is veiled, so I hold no call yet. Link an oracle (LLM_API_KEY) and I shall see the shape of the match.`;
+    const fallback = `My eye is on ${a.match.teams.map((t) => t.name).join(" vs ")} — but my oracle is veiled, so I hold no call yet. Link an oracle (LLM_API_KEY) and I shall see the shape of the match.`;
+    return { text: fallback, card: await callCard(a, b) };
   }
   try {
     const answer = await askBrain(
       `${teamA} vs ${teamB} — I don't see a live fixture today. Craft a short crow-quip admission and suggest checking the name or a nearer date.`,
       { chatRules: [], recent: [] }
     );
-    return answer ?? "No fixture for that today, master — mind the names.";
+    return { text: answer ?? "No fixture for that today, master — mind the names." };
   } catch {
-    return "No fixture for that today, master — mind the names.";
+    return { text: "No fixture for that today, master — mind the names." };
   }
+}
+
+/** Predict card for a found fixture: rendered PNG with each side's last-5 form. */
+async function callCard(a: FoundTeam, b: FoundTeam, answer?: string): Promise<CardImage | undefined> {
+  if (!config.cards) return undefined;
+  const [homeForm, awayForm] = await Promise.all([
+    formOf(a.match.league, a.team.id),
+    formOf(b.match.league, b.team.id)
+  ]);
+  return predictCard({
+    home: a.team,
+    away: b.team,
+    homeForm,
+    awayForm,
+    state: a.match.state,
+    predictedScore: scorelineOf(answer),
+    confidence: answer ? confidenceOf(answer) : undefined,
+    reasoning: answer
+  });
+}
+
+/** Best-effort "2-1"-style scoreline extraction from the crow's prose. */
+function scorelineOf(answer?: string): string | undefined {
+  if (!answer) return undefined;
+  const m = answer.match(/\b(\d)\s*[-–:]\s*(\d)\b/);
+  if (!m) return undefined;
+  return `${m[1]}-${m[2]}`;
+}
+
+/** Best-effort confidence percentage ("…75%…" → 0.75). */
+function confidenceOf(answer: string): number | undefined {
+  const m = answer.match(/(\d{1,3})\s*%/);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n === 0 || n > 100) return undefined;
+  return n / 100;
 }
 
 function mapOf(chatId: string): string {
@@ -171,6 +213,9 @@ async function main() {
       send: async (chatId: string, text: string) => {
         await sender.send({ to: chatId, text });
         console.log(`[reply to ${chatId}] ${text}`);
+      },
+      sendCard: async (chatId: string, png: Buffer, name: string) => {
+        sender.sendCard(png, name);
       }
     };
     const rl = createInterface({ input: process.stdin });
@@ -178,7 +223,12 @@ async function main() {
       if (!line.trim()) continue;
       const reply = handleMessage(line, "stdin");
       if (reply.predict) {
-        console.log(`[predict] ${await predictReply(reply.predict.teamA, reply.predict.teamB, "stdin")}`);
+        const p = await predictReply(reply.predict.teamA, reply.predict.teamB, "stdin");
+        console.log(`[predict] ${p.text}`);
+        if (config.cards && p.card) {
+          sender.sendCard(p.card.png, p.card.name);
+          console.log(`[predict caption] ${p.card.caption}`);
+        }
       } else if (reply.brain) {
         console.log(`[brain] ${await brainReply(line, "stdin")}`);
       } else {
@@ -221,6 +271,11 @@ async function main() {
       const space = spaces.get(chatId);
       if (!space) return;
       await space.send(text);
+    },
+    sendCard: async (chatId: string, png: Buffer, name: string) => {
+      const space = spaces.get(chatId);
+      if (!space) return;
+      await space.send(attachment(png, { mimeType: "image/png", name }));
     }
   };
 
@@ -237,12 +292,16 @@ async function main() {
     spaces.set(space.id, space);
     if (message.content.type !== "text") continue;
     const reply = handleMessage(message.content.text, space.id);
-    const out = reply.predict
-      ? await predictReply(reply.predict.teamA, reply.predict.teamB, space.id)
+    const pred = reply.predict ? await predictReply(reply.predict.teamA, reply.predict.teamB, space.id) : undefined;
+    const out = pred
+      ? pred.text
       : reply.brain
         ? await brainReply(message.content.text, space.id)
         : reply.text;
     await space.send(out);
+    if (pred?.card && config.cards) {
+      await space.send(attachment(pred.card.png, { mimeType: "image/png", name: pred.card.name }));
+    }
   }
 
   clearInterval(timer);

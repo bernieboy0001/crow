@@ -3,10 +3,13 @@ import type { CheckResult } from "./sources";
 import { evaluate } from "./evaluator";
 import { alertFor, alreadyTrue, checkInMessage } from "./persona";
 import type { WatchStore } from "./store";
+import { soccerAlertCard } from "./cards";
 
 export interface PollHooks {
   /** Deliver a message back to a chat by its Space id. */
   send(chatId: string, text: string): Promise<void>;
+  /** Optional: deliver a PNG scoreboard attachment alongside the alert. */
+  sendCard?(chatId: string, png: Buffer, name: string): Promise<void>;
 }
 
 /**
@@ -46,6 +49,10 @@ export async function tick(
       await hooks.send(rule.chat, alreadyTrue(rule));
     } else {
       await hooks.send(rule.chat, alertFor(rule, res));
+      if (rule.source === "soccer" && hooks.sendCard) {
+        const card = soccerAlertCard(rule, res.meta);
+        await hooks.sendCard(rule.chat, card.png, card.name);
+      }
     }
   }
   await store.save(rules);

@@ -180,8 +180,12 @@ async function callChat(messages: unknown[], toolsOn: boolean): Promise<ChatRepl
   if (toolsOn) body.tools = [FETCH_TOOL];
 
   const res = await postChat(body);
-  // Model retired/changed on the provider? Self-heal with its live list, once.
-  if (res.status === 404 && !workingModel) {
+  // 400 with tools → the model/provider rejects function calling; retry the
+  // same messages without the tools array so the brain still answers.
+  if (res.status === 400 && toolsOn) return callChat(messages, false);
+  // Model retired/changed/unknown on the provider? Self-heal with its live
+  // list, once. 404 (gone/changed) and 400 (invalid model name) both trigger.
+  if ((res.status === 404 || res.status === 400) && !workingModel) {
     const replacement = await resolveModel();
     if (replacement) {
       workingModel = replacement;
@@ -189,7 +193,10 @@ async function callChat(messages: unknown[], toolsOn: boolean): Promise<ChatRepl
       return callChat(messages, toolsOn);
     }
   }
-  if (!res.ok) throw new Error(`brain ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`brain ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+  }
   const j = (await res.json()) as {
     choices?: { message?: { content?: string | null; tool_calls?: Record<string, unknown>[] } }[];
   };
