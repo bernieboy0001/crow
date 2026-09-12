@@ -2,9 +2,9 @@ import { createServer, type Server } from "node:http";
 
 /**
  * Short-lived HTTP bridge so the KRATOS dashboard can read live runtime state.
- * Exposes no secrets (project id is masked). Loops CROWS_BRIDGE_PORT (unset/0 =
- * disabled); on Render listens on the injected PORT on 0.0.0.0 so the web
- * service reaches it over the private network. Dashboard polls GET /status.
+ * Exposes no secrets (project id is masked). Hosts inject PORT and get the
+ * bridge on 0.0.0.0 (public — protect with CROWS_BRIDGE_TOKEN); local dev uses
+ * CROWS_BRIDGE_PORT on loopback. Dashboard polls GET /status.
  */
 
 export type CrowsRecentMessage = {
@@ -78,14 +78,13 @@ export function startBridge(initial: BridgeState): BridgeHandle {
     chats: [...initial.chats],
     recent: [...initial.recent],
   };
+  // Hosts inject PORT and expect the app to listen on 0.0.0.0; local dev sets
+  // CROWS_BRIDGE_PORT and we stay loopback-only for safety.
+  const useHostPort = Boolean(process.env.PORT);
   let port = 0;
   try {
-    // Render private services are reached on the injected PORT (host 0.0.0.0);
-    // local dev uses CROWS_BRIDGE_PORT on loopback.
     port = Number.parseInt(
-      (process.env.RENDER
-        ? process.env.PORT ?? process.env.CROWS_BRIDGE_PORT
-        : process.env.CROWS_BRIDGE_PORT) ?? "",
+      (process.env.PORT ?? process.env.CROWS_BRIDGE_PORT) ?? "",
       10,
     );
   } catch {
@@ -101,12 +100,27 @@ export function startBridge(initial: BridgeState): BridgeHandle {
     };
   }
 
-  const host = process.env.RENDER ? "0.0.0.0" : "127.0.0.1";
+  const host = useHostPort ? "0.0.0.0" : "127.0.0.1";
+  const token = process.env.CROWS_BRIDGE_TOKEN?.trim() || "";
+  const pathname = (req: import("node:http").IncomingMessage): string =>
+    new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`).pathname;
+  const authorized = (req: import("node:http").IncomingMessage): boolean => {
+    if (!token) return true;
+    const header = req.headers.authorization ?? "";
+    if (header === `Bearer ${token}`) return true;
+    return new URL(req.url ?? "", `http://${req.headers.host ?? "localhost"}`).searchParams.get("token") === token;
+  };
 
   let server: Server | undefined;
   try {
     server = createServer((req, res) => {
-      if (req.url === "/status" && req.method === "GET") {
+      const path = pathname(req);
+      if (path === "/status" && req.method === "GET") {
+        if (!authorized(req)) {
+          res.writeHead(401, { "Content-Type": "text/plain" });
+          res.end("unauthorized");
+          return;
+        }
         res.writeHead(200, {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
@@ -115,7 +129,7 @@ export function startBridge(initial: BridgeState): BridgeHandle {
         res.end(JSON.stringify(crowsStatusPayload(current)));
         return;
       }
-      if (req.url === "/health" && req.method === "GET") {
+      if (path === "/health" && req.method === "GET") {
         res.writeHead(200, { "Content-Type": "text/plain" });
         res.end("ok");
         return;
