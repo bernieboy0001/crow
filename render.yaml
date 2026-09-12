@@ -1,11 +1,13 @@
 services:
-  - type: pserv
+  - type: web
     name: crows
-    # Always-on long-running process: must keep its Spectrum websocket open and
-    # accept the console's bridge poll over the private network. Free workers
-    # spin down on inactivity, so this needs a paid plan.
+    # Public always-on process: keeps its Spectrum websocket open and serves
+    # the console's bridge poll at the public URL. Render injects PORT; crow
+    # listens on it via the host-agnostic bridge (CROWS_BRIDGE_TOKEN protects
+    # /status).
     plan: starter
     runtime: node
+    port: 8790
     buildCommand: npm install
     startCommand: npm start
     disk:
@@ -18,8 +20,8 @@ services:
         value: /data/crows.json
       - key: BASE_RPC_URL
         value: https://mainnet.base.org
-      - key: CROWS_BRIDGE_PORT
-        value: 8790
+      - key: CROWS_BRIDGE_TOKEN
+        sync: false
       - key: PROJECT_ID
         sync: false
       - key: PROJECT_SECRET
