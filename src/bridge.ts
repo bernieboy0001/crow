@@ -78,13 +78,14 @@ export function startBridge(initial: BridgeState): BridgeHandle {
     chats: [...initial.chats],
     recent: [...initial.recent],
   };
-  // Hosts inject PORT and expect the app to listen on 0.0.0.0; local dev sets
+  // Hosts inject the port as PORT (Vercel/Render) or SERVER_PORT (Pterodactyl
+  // panels like Waifly) and expect the app to listen on 0.0.0.0; local dev sets
   // CROWS_BRIDGE_PORT and we stay loopback-only for safety.
-  const useHostPort = Boolean(process.env.PORT);
+  const useHostPort = Boolean(process.env.PORT || process.env.SERVER_PORT);
   let port = 0;
   try {
     port = Number.parseInt(
-      (process.env.PORT ?? process.env.CROWS_BRIDGE_PORT) ?? "",
+      (process.env.PORT ?? process.env.SERVER_PORT ?? process.env.CROWS_BRIDGE_PORT) ?? "",
       10,
     );
   } catch {
