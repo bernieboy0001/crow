@@ -1,8 +1,9 @@
 services:
-  - type: worker
+  - type: pserv
     name: crows
-    # Always-on long-running process: must keep its Spectrum websocket open.
-    # Free-tier workers spin down on inactivity, so this needs a paid plan.
+    # Always-on long-running process: must keep its Spectrum websocket open and
+    # accept the console's bridge poll over the private network. Free workers
+    # spin down on inactivity, so this needs a paid plan.
     plan: starter
     runtime: node
     buildCommand: npm install
@@ -11,11 +12,14 @@ services:
       name: crows-data
       mountPath: /data
       sizeGB: 1
+    healthCheckPath: /health
     envVars:
       - key: CROWS_STORE
         value: /data/crows.json
       - key: BASE_RPC_URL
         value: https://mainnet.base.org
+      - key: CROWS_BRIDGE_PORT
+        value: 8790
       - key: PROJECT_ID
         sync: false
       - key: PROJECT_SECRET

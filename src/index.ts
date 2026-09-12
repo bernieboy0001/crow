@@ -21,8 +21,21 @@ import {
   statsIntro,
   welcome
 } from "./persona";
+import { startBridge } from "./bridge";
 
 let rules: WatchRule[] = [];
+const bridge = startBridge({
+  startedAt: Date.now(),
+  lastTickAt: Date.now(),
+  dryRun: config.dryRun,
+  projectId: config.projectId,
+  operatorPhone: config.operatorPhone,
+  llmConfigured: Boolean(config.llmApiKey),
+  pollIntervalMs: config.pollIntervalMs,
+  rulesCount: 0,
+  chats: [],
+  recent: []
+});
 const chatters = new Map<string, ChatMemory>();
 
 export interface CrowsReply {
@@ -221,20 +234,27 @@ async function main() {
     const rl = createInterface({ input: process.stdin });
     for await (const line of rl) {
       if (!line.trim()) continue;
+      bridge.noteMessage("stdin", "in", line);
       const reply = handleMessage(line, "stdin");
+      bridge.setRuleCount(rules.length);
       if (reply.predict) {
         const p = await predictReply(reply.predict.teamA, reply.predict.teamB, "stdin");
         console.log(`[predict] ${p.text}`);
+        bridge.noteMessage("stdin", "out", p.text);
         if (config.cards && p.card) {
           sender.sendCard(p.card.png, p.card.name);
           console.log(`[predict caption] ${p.card.caption}`);
         }
       } else if (reply.brain) {
-        console.log(`[brain] ${await brainReply(line, "stdin")}`);
+        const out = await brainReply(line, "stdin");
+        console.log(`[brain] ${out}`);
+        bridge.noteMessage("stdin", "out", out);
       } else {
         console.log(`[response] ${reply.text}`);
+        bridge.noteMessage("stdin", "out", reply.text);
       }
       await tick(rules, store, hooks, check, config.checkInMs);
+      bridge.noteTick();
       await store.save(rules);
     }
     return;
@@ -285,12 +305,14 @@ async function main() {
     } catch (e) {
       console.error("tick failed:", e);
     }
+    bridge.noteTick();
   };
   const timer = setInterval(() => void run(), config.pollIntervalMs);
 
   for await (const [space, message] of app.messages) {
     spaces.set(space.id, space);
     if (message.content.type !== "text") continue;
+    bridge.noteMessage(space.id, "in", message.content.text);
     const reply = handleMessage(message.content.text, space.id);
     const pred = reply.predict ? await predictReply(reply.predict.teamA, reply.predict.teamB, space.id) : undefined;
     const out = pred
@@ -299,6 +321,8 @@ async function main() {
         ? await brainReply(message.content.text, space.id)
         : reply.text;
     await space.send(out);
+    bridge.setRuleCount(rules.length);
+    bridge.noteMessage(space.id, "out", out);
     if (pred?.card && config.cards) {
       await space.send(attachment(pred.card.png, { mimeType: "image/png", name: pred.card.name }));
     }
